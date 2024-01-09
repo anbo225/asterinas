@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
-
 use alloc::sync::Weak;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use smoltcp::socket::tcp::{RecvError, SendError};
 
@@ -17,13 +17,19 @@ use crate::{
 pub struct ConnectedStream {
     bound_socket: Arc<AnyBoundSocket>,
     remote_endpoint: IpEndpoint,
+    new_connection: AtomicBool,
 }
 
 impl ConnectedStream {
-    pub fn new(bound_socket: Arc<AnyBoundSocket>, remote_endpoint: IpEndpoint) -> Self {
+    pub fn new(
+        bound_socket: Arc<AnyBoundSocket>,
+        remote_endpoint: IpEndpoint,
+        new_connection: bool,
+    ) -> Self {
         Self {
             bound_socket,
             remote_endpoint,
+            new_connection: AtomicBool::new(new_connection),
         }
     }
 
@@ -71,6 +77,14 @@ impl ConnectedStream {
 
     pub fn remote_endpoint(&self) -> IpEndpoint {
         self.remote_endpoint
+    }
+
+    pub fn is_new_connection(&self) -> bool {
+        self.new_connection.load(Ordering::Relaxed)
+    }
+
+    pub fn clear_new_connection(&self) {
+        self.new_connection.store(false, Ordering::Relaxed)
     }
 
     pub(super) fn init_pollee(&self, pollee: &Pollee) {

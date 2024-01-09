@@ -114,26 +114,71 @@ impl StreamSocket {
         self.is_nonblocking.store(nonblocking, Ordering::Relaxed);
     }
 
-    fn start_connect(&self, remote_endpoint: &IpEndpoint) -> Result<()> {
+    // Returns `None` to block the task and wait for the connection to be established, and returns
+    // `Some(_)` if blocking is not necessary or not allowed.
+    fn start_connect(&self, remote_endpoint: &IpEndpoint) -> Option<Result<()>> {
+        let is_nonblocking = self.is_nonblocking();
         let mut state = self.state.write();
 
         state.borrow_result(|owned_state| {
-            let State::Init(init_stream) = owned_state else {
-                return (
-                    owned_state,
-                    Err(Error::with_message(Errno::EINVAL, "cannot connect")),
-                );
+            let init_stream = match owned_state {
+                State::Init(init_stream) => init_stream,
+                State::Connecting(_) if is_nonblocking => {
+                    return (
+                        owned_state,
+                        Some(Err(Error::with_message(
+                            Errno::EALREADY,
+                            "the socket is connecting",
+                        ))),
+                    );
+                }
+                State::Connecting(_) => {
+                    return (owned_state, None);
+                }
+                State::Connected(ref connected_stream) => {
+                    let new_connection = connected_stream.is_new_connection();
+                    if new_connection {
+                        connected_stream.clear_new_connection();
+                        return (owned_state, Some(Ok(())));
+                    }
+                    return (
+                        owned_state,
+                        Some(Err(Error::with_message(
+                            Errno::EISCONN,
+                            "the socket is already connected",
+                        ))),
+                    );
+                }
+                State::Listen(_) => {
+                    return (
+                        owned_state,
+                        Some(Err(Error::with_message(
+                            Errno::EISCONN,
+                            "the socket is listening",
+                        ))),
+                    );
+                }
             };
 
             let connecting_stream = match init_stream.connect(remote_endpoint) {
                 Ok(connecting_stream) => connecting_stream,
                 Err((err, init_stream)) => {
-                    return (State::Init(init_stream), Err(err));
+                    return (State::Init(init_stream), Some(Err(err)));
                 }
             };
             connecting_stream.init_pollee(&self.pollee);
 
-            (State::Connecting(connecting_stream), Ok(()))
+            (
+                State::Connecting(connecting_stream),
+                if is_nonblocking {
+                    Some(Err(Error::with_message(
+                        Errno::EINPROGRESS,
+                        "the socket is connecting",
+                    )))
+                } else {
+                    None
+                },
+            )
         })
     }
 
@@ -166,6 +211,24 @@ impl StreamSocket {
 
             (State::Connected(connected_stream), Ok(()))
         })
+    }
+
+    fn check_connect(&self) -> Result<()> {
+        let state = self.state.read();
+
+        match state.as_ref() {
+            State::Connecting(_) => {
+                return_errno_with_message!(Errno::EAGAIN, "the connection is pending")
+            }
+            State::Connected(connected_stream) => {
+                connected_stream.clear_new_connection();
+                Ok(())
+            }
+            State::Init(_) | State::Listen(_) => {
+                // FIXME: The error code should be retrieved via the `SO_ERROR` socket option
+                return_errno_with_message!(Errno::ECONNREFUSED, "the connection is refused");
+            }
+        }
     }
 
     fn try_accept(&self) -> Result<(Arc<dyn FileLike>, SocketAddr)> {
@@ -244,15 +307,21 @@ impl StreamSocket {
         }
     }
 
-    fn update_io_events(&self) {
+    fn update_io_events(&self) -> bool {
         let state = self.state.read();
         match state.as_ref() {
-            State::Init(_) => (),
+            State::Init(_) => false,
             State::Connecting(connecting_stream) => {
                 connecting_stream.update_io_events(&self.pollee)
             }
-            State::Listen(listen_stream) => listen_stream.update_io_events(&self.pollee),
-            State::Connected(connected_stream) => connected_stream.update_io_events(&self.pollee),
+            State::Listen(listen_stream) => {
+                listen_stream.update_io_events(&self.pollee);
+                false
+            }
+            State::Connected(connected_stream) => {
+                connected_stream.update_io_events(&self.pollee);
+                false
+            }
         }
     }
 }
@@ -343,13 +412,16 @@ impl Socket for StreamSocket {
         })
     }
 
-    // TODO: Support nonblocking mode
     fn connect(&self, socket_addr: SocketAddr) -> Result<()> {
         let remote_endpoint = socket_addr.try_into()?;
-        self.start_connect(&remote_endpoint)?;
 
+        if let Some(result) = self.start_connect(&remote_endpoint) {
+            poll_ifaces();
+            return result;
+        }
         poll_ifaces();
-        self.wait_events(IoEvents::OUT, || self.finish_connect())
+
+        self.wait_events(IoEvents::OUT, || self.check_connect())
     }
 
     fn listen(&self, backlog: usize) -> Result<()> {
@@ -583,6 +655,12 @@ impl Socket for StreamSocket {
 
 impl Observer<()> for StreamSocket {
     fn on_events(&self, events: &()) {
-        self.update_io_events();
+        let conn_ready = self.update_io_events();
+
+        if conn_ready {
+            // FIXME: The error code should be stored as the `SO_ERROR` socket option. Since it
+            // does not exist yet, we ignore the return value below.
+            let _ = self.finish_connect();
+        }
     }
 }
