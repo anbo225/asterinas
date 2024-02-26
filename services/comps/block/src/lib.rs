@@ -40,20 +40,21 @@ mod impl_block_device;
 mod prelude;
 pub mod request_queue;
 
-use self::{prelude::*, request_queue::BioRequestQueue};
-
 use aster_frame::sync::SpinLock;
-use component::init_component;
-use component::ComponentInitError;
-
+use component::{init_component, ComponentInitError};
 use spin::Once;
+
+use self::{
+    bio::{BioEnqueueError, SubmittedBio},
+    prelude::*,
+};
 
 pub const BLOCK_SIZE: usize = aster_frame::config::PAGE_SIZE;
 pub const SECTOR_SIZE: usize = 512;
 
 pub trait BlockDevice: Send + Sync + Any + Debug {
-    /// Returns this block device's request queue, to which block I/O requests may be submitted.
-    fn request_queue(&self) -> &dyn BioRequestQueue;
+    /// Enqueues a new `SubmittedBio` to the block device.
+    fn enqueue(&self, bio: SubmittedBio) -> Result<(), BioEnqueueError>;
     fn handle_irq(&self);
 }
 

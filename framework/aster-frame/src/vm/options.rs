@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::{prelude::*, Error};
-
 use super::{frame::VmFrameFlags, frame_allocator, VmFrame, VmFrameVec, VmSegment};
+use crate::{prelude::*, Error};
 
 /// Options for allocating physical memory pages (or frames).
 ///
@@ -59,7 +58,9 @@ impl VmAllocOptions {
             VmFrameVec(frame_list)
         };
         if !self.uninit {
-            frames.zero();
+            for frame in frames.iter() {
+                frame.writer().fill(0);
+            }
         }
 
         Ok(frames)
@@ -73,7 +74,7 @@ impl VmAllocOptions {
 
         let frame = frame_allocator::alloc_single(self.flags()).ok_or(Error::NoMemory)?;
         if !self.uninit {
-            frame.zero();
+            frame.writer().fill(0);
         }
 
         Ok(frame)
@@ -90,7 +91,7 @@ impl VmAllocOptions {
         let segment =
             frame_allocator::alloc_contiguous(self.nframes, self.flags()).ok_or(Error::NoMemory)?;
         if !self.uninit {
-            segment.zero();
+            segment.writer().fill(0);
         }
 
         Ok(segment)
