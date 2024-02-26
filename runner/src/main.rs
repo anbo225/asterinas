@@ -120,6 +120,7 @@ pub const GDB_ARGS: &[&str] = &[
     "-gdb",
     "chardev:gdb0",
     "-S",
+    "-s",
 ];
 
 fn main() {

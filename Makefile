@@ -62,6 +62,7 @@ endif
 ifeq ($(GDB_SERVER), 1)
 ENABLE_KVM := 0
 RUNNER_ARGS += --halt-for-gdb
+GLOBAL_RUSTC_FLAGS += -C debuginfo=2
 endif
 
 ifeq ($(GDB_CLIENT), 1)
