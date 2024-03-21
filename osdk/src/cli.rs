@@ -5,7 +5,10 @@ use std::path::PathBuf;
 use clap::{crate_version, Args, Parser};
 
 use crate::{
-    commands::{execute_check_command, execute_clippy_command, execute_new_command},
+    commands::{
+        execute_build_command, execute_forwarded_command, execute_new_command, execute_run_command,
+        execute_test_command,
+    },
     config_manager::{
         boot::{BootLoader, BootProtocol},
         qemu::QemuMachine,
@@ -24,24 +27,19 @@ pub fn main() {
         OsdkSubcommand::New(args) => execute_new_command(args),
         OsdkSubcommand::Build(build_args) => {
             let build_config = BuildConfig::parse(build_args);
-            println!("{:?}", build_config);
-            // TODO: execute_build_command(build_config);
-            // todo!("execute build command");
+            execute_build_command(&build_config);
         }
         OsdkSubcommand::Run(run_args) => {
             let run_config = RunConfig::parse(run_args);
-            println!("{:?}", run_config);
-            // TODO: execute_run_command(run_config);
-            // todo!("execute run command");
+            execute_run_command(&run_config);
         }
         OsdkSubcommand::Test(test_args) => {
             let test_config = TestConfig::parse(test_args);
-            println!("{:?}", test_config);
-            // TODO: execute_test_command(test_config);
-            // todo!("execute test command");
+            execute_test_command(&test_config);
         }
-        OsdkSubcommand::Check => execute_check_command(),
-        OsdkSubcommand::Clippy => execute_clippy_command(),
+        OsdkSubcommand::Check(args) => execute_forwarded_command("check", &args.args),
+        OsdkSubcommand::Clippy(args) => execute_forwarded_command("clippy", &args.args),
+        OsdkSubcommand::Doc(args) => execute_forwarded_command("doc", &args.args),
     }
 }
 
@@ -71,10 +69,22 @@ pub enum OsdkSubcommand {
     Run(RunArgs),
     #[command(about = "Execute kernel mode unit test by starting a VMM")]
     Test(TestArgs),
-    #[command(about = "Analyze the current package and report errors")]
-    Check,
-    #[command(about = "Check the current package and catch common mistakes")]
-    Clippy,
+    #[command(about = "Check a local package and all of its dependencies for errors")]
+    Check(ForwardedArguments),
+    #[command(about = "Checks a package to catch common mistakes and improve your Rust code")]
+    Clippy(ForwardedArguments),
+    #[command(about = "Build a package's documentation")]
+    Doc(ForwardedArguments),
+}
+
+#[derive(Debug, Parser)]
+pub struct ForwardedArguments {
+    #[arg(
+        help = "The full set of Cargo arguments",
+        trailing_var_arg = true,
+        allow_hyphen_values = true
+    )]
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -114,20 +124,26 @@ pub struct TestArgs {
     pub osdk_args: OsdkArgs,
 }
 
-#[derive(Debug, Args, Default)]
+#[derive(Debug, Args, Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CargoArgs {
     #[arg(
         long,
-        help = "Build artifacts in release mode",
-        default_value = "false"
+        help = "The Cargo build profile (built-in candidates are 'dev', 'release', 'test' and 'bench')",
+        default_value = "dev"
     )]
-    pub release: bool,
+    pub profile: String,
     #[arg(long, value_name = "FEATURES", help = "List of features to activate")]
     pub features: Vec<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct OsdkArgs {
+    #[arg(
+        long = "select",
+        help = "Select the specific configuration provided in the OSDK manifest",
+        value_name = "SELECTION"
+    )]
+    pub select: Option<String>,
     #[arg(
         long = "kcmd_args",
         help = "Command line arguments for guest kernel",

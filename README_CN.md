@@ -1,6 +1,9 @@
 <p align="center">
     <img src="docs/src/images/logo_cn.svg" alt="asterinas-logo" width="620"><br>
-    一个安全、快速、通用的操作系统内核，使用Rust编写，并与Linux兼容
+    一个安全、快速、通用的操作系统内核，使用Rust编写，并与Linux兼容<br/>
+    <a href="https://github.com/asterinas/asterinas/actions/workflows/osdk_test.yml"><img src="https://github.com/asterinas/asterinas/actions/workflows/osdk_test.yml/badge.svg?event=push" alt="OSDK Test" style="max-width: 100%;"></a>
+    <a href="https://github.com/asterinas/asterinas/actions/workflows/kernel_test.yml"><img src="https://github.com/asterinas/asterinas/actions/workflows/kernel_test.yml/badge.svg?event=push" alt="Kernel Test" style="max-width: 100%;"></a>
+    <br/>
 </p>
 
 [English](README.md) | 中文版
@@ -21,7 +24,7 @@
 * 星绽在开发者友好性方面优于Linux。
 它赋能内核开发者们
 （1）使用生产力更高的Rust编程语言，
-（2）利用一个专为内核开发者设计的工具包（称为[OSDK]()）来简化他们的工作流程，
+（2）利用一个专为内核开发者设计的工具包（称为[OSDK](https://asterinas.github.io/book/osdk/guide/index.html)）来简化他们的工作流程，
 （3）享受[MPL](#License)所带来的灵活性，
 可自由选择开源或闭源他们为星绽所开发的内核模块或驱动。
 
@@ -45,7 +48,7 @@ git clone https://github.com/asterinas/asterinas
 2. 运行一个作为开发环境的Docker容器。
 
 ```bash
-docker run -it --privileged --network=host --device=/dev/kvm -v ./asterinas:/root/asterinas asterinas/asterinas:0.3.0
+docker run -it --privileged --network=host --device=/dev/kvm -v ./asterinas:/root/asterinas asterinas/asterinas:0.4.1
 ```
 
 3. 在容器内，进入项目文件夹构建并运行星绽。

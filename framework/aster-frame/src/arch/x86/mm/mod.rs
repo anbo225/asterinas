@@ -6,13 +6,14 @@ use pod::Pod;
 use x86_64::{instructions::tlb, structures::paging::PhysFrame, VirtAddr};
 
 use crate::{
-    config::ENTRY_COUNT,
     sync::Mutex,
     vm::{
         page_table::{table_of, PageTableEntryTrait, PageTableFlagsTrait},
         Paddr, Vaddr,
     },
 };
+
+pub(crate) const NR_ENTRIES_PER_PAGE: usize = 512;
 
 bitflags::bitflags! {
     #[derive(Pod)]
@@ -39,6 +40,9 @@ bitflags::bitflags! {
         /// Indicates that the mapping is present in all address spaces, so it isn't flushed from
         /// the TLB on an address space switch.
         const GLOBAL =          1 << 8;
+        /// TDX shared bit.
+        #[cfg(feature = "intel_tdx")]
+        const SHARED =          1 << 51;
         /// Forbid execute codes on the page. The NXE bits in EFER msr must be set.
         const NO_EXECUTE =      1 << 63;
     }
@@ -176,7 +180,10 @@ impl PageTableFlagsTrait for PageTableFlags {
 
 impl PageTableEntry {
     /// 51:12
+    #[cfg(not(feature = "intel_tdx"))]
     const PHYS_ADDR_MASK: usize = 0xF_FFFF_FFFF_F000;
+    #[cfg(feature = "intel_tdx")]
+    const PHYS_ADDR_MASK: usize = 0x7_FFFF_FFFF_F000;
 }
 
 impl PageTableEntryTrait for PageTableEntry {
@@ -204,7 +211,7 @@ impl PageTableEntryTrait for PageTableEntry {
 
     fn page_index(va: crate::vm::Vaddr, level: usize) -> usize {
         debug_assert!((1..=5).contains(&level));
-        va >> (12 + 9 * (level - 1)) & (ENTRY_COUNT - 1)
+        va >> (12 + 9 * (level - 1)) & (NR_ENTRIES_PER_PAGE - 1)
     }
 }
 

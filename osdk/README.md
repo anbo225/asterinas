@@ -1,6 +1,7 @@
 # Accelerate OS development with Asterinas OSDK
 
 [![Crates.io](https://img.shields.io/crates/v/cargo-osdk.svg)](https://crates.io/crates/cargo-osdk)
+[![OSDK Test](https://github.com/asterinas/asterinas/actions/workflows/osdk_test.yml/badge.svg?event=push)](https://github.com/asterinas/asterinas/actions/workflows/osdk_test.yml)
 
 ### What is it?
 
@@ -16,6 +17,7 @@ Currenly, `cargo-osdk` only supports x86_64 ubuntu system.
 
 To run a kernel with QEMU, `cargo-osdk` requires the following tools to be installed: 
 - Rust >= 1.75.0
+- cargo-binutils
 - gcc
 - qemu-system-x86_64
 - grub-mkrescue
@@ -24,7 +26,12 @@ To run a kernel with QEMU, `cargo-osdk` requires the following tools to be insta
 
 About how to install Rust, you can refer to the [official site](https://www.rust-lang.org/tools/install).
 
-Other tools  can be installed by
+After installing Rust, you can install Cargo tools by
+```bash
+cargo install cargo-binutils
+```
+
+Other tools can be installed by
 ```bash
 apt install build-essential grub2-common qemu-system-x86 ovmf xorriso
 ```
@@ -139,7 +146,7 @@ Optional. Default is `q35`.
 The allowed values are `q35` and `microvm`.  
 10. Additional arguments passed to QEMU.   
 Optional. The default value is empty.   
-Each argument should be in the form `KEY VALUE` (separated by space), or `KEY` if no value is required. Some keys can appear multiple times (e.g., `-device`, `-netdev`), while other keys can appear at most once. Certain keys, such as `-cpu` and `-machine`, are not allowed to be set here as they may conflict with the internal settings of `cargo-osdk`.
+Each argument should be in the form `KEY VALUE` (separated by space), or `KEY` if no value is required. Some keys can appear multiple times (e.g., `-device`, `-netdev`), while other keys can appear at most once. Certain keys, such as `-cpu` and `-machine`, are not allowed to be set here as they may conflict with the internal settings of `cargo-osdk`.  
 11. Conditional QEMU settings.   
 Optional. The default value is empty.   
 Conditional QEMU settings allow for a condition to be specified after `qemu`. Currently, `cargo-osdk` only supports the condition `cfg(feature="FEATURE")`, which activates the QEMU settings only if the `FEATURE` is set. The `FEATURE` must be defined in the project's `Cargo.toml`. At most one conditional setting can be activated at a time. If multiple conditional settings can be activated simultaneously, `cargo-osdk` will report an error. In the future, `cargo-osdk` will support all possible conditions that [Rust conditional compilation](https://doc.rust-lang.org/reference/conditional-compilation.html) supports.

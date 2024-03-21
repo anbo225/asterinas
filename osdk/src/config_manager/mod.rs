@@ -9,6 +9,9 @@ pub mod boot;
 pub mod manifest;
 pub mod qemu;
 
+#[cfg(test)]
+mod test;
+
 use std::{fs, path::PathBuf, process};
 
 use indexmap::{IndexMap, IndexSet};
@@ -22,7 +25,7 @@ use crate::{
     cli::{BuildArgs, CargoArgs, OsdkArgs, RunArgs, TestArgs},
     error::Errno,
     error_msg,
-    utils::get_cargo_metadata,
+    util::get_cargo_metadata,
     warn_msg,
 };
 
@@ -36,7 +39,7 @@ pub struct BuildConfig {
 impl BuildConfig {
     pub fn parse(args: &BuildArgs) -> Self {
         let cargo_args = split_features(&args.cargo_args);
-        let mut manifest = load_osdk_manifest(&cargo_args);
+        let mut manifest = load_osdk_manifest(&cargo_args, args.osdk_args.select.as_ref());
         apply_cli_args(&mut manifest, &args.osdk_args);
         try_fill_system_configs(&mut manifest);
         Self {
@@ -56,7 +59,7 @@ pub struct RunConfig {
 impl RunConfig {
     pub fn parse(args: &RunArgs) -> Self {
         let cargo_args = split_features(&args.cargo_args);
-        let mut manifest = load_osdk_manifest(&cargo_args);
+        let mut manifest = load_osdk_manifest(&cargo_args, args.osdk_args.select.as_ref());
         apply_cli_args(&mut manifest, &args.osdk_args);
         try_fill_system_configs(&mut manifest);
         Self {
@@ -77,7 +80,7 @@ pub struct TestConfig {
 impl TestConfig {
     pub fn parse(args: &TestArgs) -> Self {
         let cargo_args = split_features(&args.cargo_args);
-        let mut manifest = load_osdk_manifest(&cargo_args);
+        let mut manifest = load_osdk_manifest(&cargo_args, args.osdk_args.select.as_ref());
         apply_cli_args(&mut manifest, &args.osdk_args);
         try_fill_system_configs(&mut manifest);
         Self {
@@ -88,17 +91,20 @@ impl TestConfig {
     }
 }
 
-fn load_osdk_manifest(cargo_args: &CargoArgs) -> OsdkManifest {
-    let manifest_path = {
-        let feature_strings = get_feature_strings(cargo_args);
-        let cargo_metadata = get_cargo_metadata(None::<&str>, Some(&feature_strings));
-        let workspace_root = cargo_metadata
+/// FIXME: I guess OSDK manifest is definitely NOT per workspace. It's per crate. When you cannot
+/// find a manifest per crate, find it in the upper levels.
+/// I don't bother to do it now, just fix the relpaths.
+fn load_osdk_manifest<S: AsRef<str>>(cargo_args: &CargoArgs, selection: Option<S>) -> OsdkManifest {
+    let feature_strings = get_feature_strings(cargo_args);
+    let cargo_metadata = get_cargo_metadata(None::<&str>, Some(&feature_strings)).unwrap();
+    let workspace_root = PathBuf::from(
+        cargo_metadata
             .get("workspace_root")
             .unwrap()
             .as_str()
-            .unwrap();
-        PathBuf::from(workspace_root).join("OSDK.toml")
-    };
+            .unwrap(),
+    );
+    let manifest_path = workspace_root.join("OSDK.toml");
 
     let Ok(contents) = fs::read_to_string(&manifest_path) else {
         error_msg!(
@@ -108,8 +114,18 @@ fn load_osdk_manifest(cargo_args: &CargoArgs) -> OsdkManifest {
         process::exit(Errno::GetMetadata as _);
     };
 
-    let toml_manifest: TomlManifest = toml::from_str(&contents).unwrap();
-    OsdkManifest::from_toml_manifest(toml_manifest, &cargo_args.features)
+    let toml_manifest: TomlManifest = toml::from_str(&contents).unwrap_or_else(|err| {
+        error_msg!(
+            "Cannot parse TOML file, {}:\n{}:\n {}",
+            err.message(),
+            manifest_path.to_string_lossy().to_string(),
+            &contents[err.span().unwrap()],
+        );
+        process::exit(Errno::ParseMetadata as _);
+    });
+    let mut osdk_manifest = OsdkManifest::from_toml_manifest(toml_manifest, selection);
+    osdk_manifest.check_canonicalize_all_paths(workspace_root);
+    osdk_manifest
 }
 
 /// Split `features` in `cargo_args` to ensure each string contains exactly one feature.
@@ -126,7 +142,7 @@ fn split_features(cargo_args: &CargoArgs) -> CargoArgs {
     }
 
     CargoArgs {
-        release: cargo_args.release,
+        profile: cargo_args.profile.clone(),
         features,
     }
 }
@@ -322,40 +338,4 @@ fn split_kcmd_args(kcmd_args: &mut Vec<String>) -> Vec<String> {
     let mut init_args = kcmd_args.split_off(index);
     init_args.remove(0);
     init_args
-}
-
-#[test]
-fn split_kcmd_args_test() {
-    let mut kcmd_args = ["init=/bin/sh", "--", "sh", "-l"]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    let init_args = split_kcmd_args(&mut kcmd_args);
-    let expected_kcmd_args: Vec<_> = ["init=/bin/sh"].iter().map(ToString::to_string).collect();
-    assert_eq!(kcmd_args, expected_kcmd_args);
-    let expecetd_init_args: Vec<_> = ["sh", "-l"].iter().map(ToString::to_string).collect();
-    assert_eq!(init_args, expecetd_init_args);
-
-    let mut kcmd_args = ["init=/bin/sh", "--"]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    let init_args = split_kcmd_args(&mut kcmd_args);
-    let expected_kcmd_args: Vec<_> = ["init=/bin/sh"].iter().map(ToString::to_string).collect();
-    assert_eq!(kcmd_args, expected_kcmd_args);
-    let expecetd_init_args: Vec<String> = Vec::new();
-    assert_eq!(init_args, expecetd_init_args);
-
-    let mut kcmd_args = ["init=/bin/sh", "shell=/bin/sh"]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    let init_args = split_kcmd_args(&mut kcmd_args);
-    let expected_kcmd_args: Vec<_> = ["init=/bin/sh", "shell=/bin/sh"]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    assert_eq!(kcmd_args, expected_kcmd_args);
-    let expecetd_init_args: Vec<String> = Vec::new();
-    assert_eq!(init_args, expecetd_init_args);
 }
