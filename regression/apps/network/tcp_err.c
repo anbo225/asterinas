@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -62,7 +63,7 @@ FN_SETUP(connected)
 	sk_addr.sin_port = S_PORT;
 	CHECK_WITH(connect(sk_connected, (struct sockaddr *)&sk_addr,
 			   sizeof(sk_addr)),
-		   _ret == 0 || errno == EINPROGRESS);
+		   _ret < 0 && errno == EINPROGRESS);
 }
 END_SETUP()
 
@@ -70,11 +71,12 @@ FN_SETUP(accpected)
 {
 	struct sockaddr addr;
 	socklen_t addrlen = sizeof(addr);
+	struct pollfd pfd = { .fd = sk_listen, .events = POLLIN };
 
-	do {
-		sk_accepted = CHECK_WITH(accept(sk_listen, &addr, &addrlen),
-					 _ret >= 0 || errno == EAGAIN);
-	} while (sk_accepted < 0);
+	CHECK_WITH(poll(&pfd, 1, 1000),
+		   _ret >= 0 && ((pfd.revents & (POLLIN | POLLOUT)) & POLLIN));
+
+	sk_accepted = CHECK(accept(sk_listen, &addr, &addrlen));
 }
 END_SETUP()
 
@@ -224,5 +226,67 @@ FN_TEST(accept)
 	TEST_ERRNO(accept(sk_connected, psaddr, &addrlen), EINVAL);
 
 	TEST_ERRNO(accept(sk_accepted, psaddr, &addrlen), EINVAL);
+}
+END_TEST()
+
+FN_TEST(poll)
+{
+	struct pollfd pfd = { .events = POLLIN | POLLOUT };
+
+	pfd.fd = sk_unbound;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+
+	pfd.fd = sk_bound;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+
+	pfd.fd = sk_listen;
+	TEST_RES(poll(&pfd, 1, 0), (pfd.revents & (POLLIN | POLLOUT)) == 0);
+
+	pfd.fd = sk_connected;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+
+	pfd.fd = sk_accepted;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+}
+END_TEST()
+
+FN_TEST(connect)
+{
+	struct sockaddr *psaddr = (struct sockaddr *)&sk_addr;
+	socklen_t addrlen = sizeof(sk_addr);
+
+	TEST_ERRNO(connect(sk_listen, psaddr, addrlen), EISCONN);
+
+	TEST_ERRNO(connect(sk_connected, psaddr, addrlen), 0);
+
+	TEST_ERRNO(connect(sk_connected, psaddr, addrlen), EISCONN);
+
+	TEST_ERRNO(connect(sk_accepted, psaddr, addrlen), EISCONN);
+}
+END_TEST()
+
+FN_TEST(async_connect)
+{
+	struct pollfd pfd = { .fd = sk_bound, .events = POLLOUT };
+	int err;
+	socklen_t errlen = sizeof(err);
+
+	sk_addr.sin_port = 0xbeef;
+	TEST_ERRNO(connect(sk_bound, (struct sockaddr *)&sk_addr,
+			   sizeof(sk_addr)),
+		   EINPROGRESS);
+
+	TEST_RES(poll(&pfd, 1, 60), pfd.revents & POLLOUT);
+
+	TEST_RES(getsockopt(sk_bound, SOL_SOCKET, SO_ERROR, &err, &errlen),
+		 errlen == sizeof(err) && err == ECONNREFUSED);
+
+	// Reading the socket error will cause it to be cleared
+	TEST_RES(getsockopt(sk_bound, SOL_SOCKET, SO_ERROR, &err, &errlen),
+		 errlen == sizeof(err) && err == 0);
 }
 END_TEST()

@@ -72,6 +72,7 @@ impl DatagramSocket {
         Arc::new_cyclic(|me| {
             let unbound_datagram = UnboundDatagram::new(me.clone() as _);
             let pollee = Pollee::new(IoEvents::empty());
+            unbound_datagram.reset_io_events(&pollee);
             Self {
                 inner: RwLock::new(Takeable::new(Inner::Unbound(unbound_datagram))),
                 nonblocking: AtomicBool::new(nonblocking),
@@ -209,6 +210,24 @@ impl FileLike for DatagramSocket {
             self.set_nonblocking(false);
         }
         Ok(())
+    }
+
+    fn register_observer(
+        &self,
+        observer: Weak<dyn Observer<IoEvents>>,
+        mask: IoEvents,
+    ) -> Result<()> {
+        self.pollee.register_observer(observer, mask);
+        Ok(())
+    }
+
+    fn unregister_observer(
+        &self,
+        observer: &Weak<dyn Observer<IoEvents>>,
+    ) -> Result<Weak<dyn Observer<IoEvents>>> {
+        self.pollee
+            .unregister_observer(observer)
+            .ok_or_else(|| Error::with_message(Errno::ENOENT, "observer is not registered"))
     }
 }
 

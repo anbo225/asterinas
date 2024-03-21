@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -166,5 +167,32 @@ FN_TEST(accept)
 	TEST_ERRNO(accept(sk_bound, psaddr, &addrlen), EOPNOTSUPP);
 
 	TEST_ERRNO(accept(sk_connected, psaddr, &addrlen), EOPNOTSUPP);
+}
+END_TEST()
+
+FN_TEST(poll)
+{
+	struct pollfd pfd = { .events = POLLIN | POLLOUT };
+
+	pfd.fd = sk_unbound;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+
+	pfd.fd = sk_bound;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+
+	pfd.fd = sk_connected;
+	TEST_RES(poll(&pfd, 1, 0),
+		 (pfd.revents & (POLLIN | POLLOUT)) == POLLOUT);
+}
+END_TEST()
+
+FN_TEST(connect)
+{
+	struct sockaddr *psaddr = (struct sockaddr *)&sk_addr;
+	socklen_t addrlen = sizeof(sk_addr);
+
+	TEST_SUCC(connect(sk_connected, psaddr, addrlen));
 }
 END_TEST()
