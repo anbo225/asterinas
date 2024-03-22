@@ -143,20 +143,20 @@ impl SigQueues {
         &mut self.rt_queues[idx]
     }
     
-    pub fn sig_pending(&mut self) -> SigSet {
+    pub fn sig_pending(&self) -> SigSet {
         let mut pending = SigSet::new_empty();
 
         // Process standard signal queues
         for (idx, signal) in self.std_queues.iter().enumerate(){
             if signal.is_some(){
-                pending.add_signal(SigNum::try_from(idx as u8 + MIN_STD_SIG_NUM).unwrap());
+                pending.add_signal(SigNum::from_u8(idx as u8 + MIN_STD_SIG_NUM));
             }
         }
 
         // Process real-time signal queues
         for (idx, signals) in self.rt_queues.iter().enumerate(){
             if !signals.is_empty(){
-                pending.add_signal(SigNum::try_from(idx as u8 + MIN_RT_SIG_NUM).unwrap());
+                pending.add_signal(SigNum::from_u8(idx as u8 + MIN_RT_SIG_NUM));
             }
         }
         

@@ -29,7 +29,6 @@ fn do_rt_sigpending(
     set_ptr: Vaddr,
     sigset_size: usize,
 ) -> Result<()> {
-    let current = current!();
     let current_thread = current_thread!();
     let posix_thread = current_thread.as_posix_thread().unwrap();
 
