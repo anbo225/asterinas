@@ -6,7 +6,7 @@ use connected::ConnectedStream;
 use connecting::ConnectingStream;
 use init::InitStream;
 use listen::ListenStream;
-use options::{Congestion, MaxSegment, NoDelay, WindowClamp};
+use options::{Congestion, MaxSegment, NoDelay, WindowClamp, KeepIdle};
 use smoltcp::wire::IpEndpoint;
 use takeable::Takeable;
 use util::{TcpOptionSet, DEFAULT_MAXSEG};
@@ -20,7 +20,7 @@ use crate::{
         poll_ifaces,
         socket::{
             options::{
-                Error as SocketError, Linger, RecvBuf, ReuseAddr, ReusePort, SendBuf, SocketOption,
+                Error as SocketError, Linger, RecvBuf, ReuseAddr, ReusePort, SendBuf, SocketOption, KeepAlive
             },
             util::{
                 options::{SocketOptionSet, MIN_RECVBUF, MIN_SENDBUF},
@@ -625,6 +625,9 @@ impl Socket for StreamSocket {
             socket_reuse_addr: ReuseAddr => {
                 let reuse_addr = socket_reuse_addr.get().unwrap();
                 options.socket.set_reuse_addr(*reuse_addr);
+            },
+            socket_keepalive: KeepAlive =>{
+
             },
             socket_reuse_port: ReusePort => {
                 let reuse_port = socket_reuse_port.get().unwrap();

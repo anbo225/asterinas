@@ -8,4 +8,6 @@ impl_socket_options!(
     pub struct Congestion(CongestionControl);
     pub struct MaxSegment(u32);
     pub struct WindowClamp(u32);
+    pub struct KeepIdle(bool);
+
 );

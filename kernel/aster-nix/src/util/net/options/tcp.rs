@@ -5,7 +5,7 @@ use aster_rights::Full;
 use super::RawSocketOption;
 use crate::{
     impl_raw_socket_option,
-    net::socket::ip::stream::options::{Congestion, MaxSegment, NoDelay, WindowClamp},
+    net::socket::ip::stream::options::{Congestion, MaxSegment, NoDelay, WindowClamp, KeepIdle},
     prelude::*,
     util::net::options::SocketOption,
     vm::vmar::Vmar,
@@ -29,12 +29,16 @@ pub enum CTcpOptionName {
 }
 
 pub fn new_tcp_option(name: i32) -> Result<Box<dyn RawSocketOption>> {
+    error!("new tcp  Option {}", name);
+
     let name = CTcpOptionName::try_from(name)?;
     match name {
         CTcpOptionName::NODELAY => Ok(Box::new(NoDelay::new())),
         CTcpOptionName::CONGESTION => Ok(Box::new(Congestion::new())),
         CTcpOptionName::MAXSEG => Ok(Box::new(MaxSegment::new())),
         CTcpOptionName::WINDOW_CLAMP => Ok(Box::new(WindowClamp::new())),
+        CTcpOptionName::KEEPIDLE => Ok(Box::new(KeepIdle::new())),
+
         _ => todo!(),
     }
 }
@@ -43,3 +47,5 @@ impl_raw_socket_option!(NoDelay);
 impl_raw_socket_option!(Congestion);
 impl_raw_socket_option!(MaxSegment);
 impl_raw_socket_option!(WindowClamp);
+impl_raw_socket_option!(KeepIdle);
+
