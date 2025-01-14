@@ -39,6 +39,11 @@ fn send_parent_death_signal(current_process: &Process) {
         let signal = KernelSignal::new(signum);
         child.enqueue_signal(signal);
     }
+    let val = current_process
+        .vfork_done()
+        .lock()
+        .as_ref()
+        .is_some_and(|x| x.wake_up());
 }
 
 /// Moves the children to the init process.
