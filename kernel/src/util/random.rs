@@ -20,36 +20,44 @@ pub fn init() {
     // The seed used to initialize the RNG is required to be secure and unpredictable.
 
     cfg_if::cfg_if! {
-        if #[cfg(target_arch = "x86_64")] {
-            use rand::SeedableRng;
-            use ostd::arch::read_random;
+            if #[cfg(target_arch = "x86_64")] {
+                use rand::SeedableRng;
+                use ostd::arch::read_random;
 
-            let mut seed = <StdRng as SeedableRng>::Seed::default();
-            let mut chunks = seed.as_mut().chunks_exact_mut(size_of::<u64>());
-            for chunk in chunks.by_ref() {
-                let src = read_random().expect("read_random failed multiple times").to_ne_bytes();
-                chunk.copy_from_slice(&src);
+                let mut seed = <StdRng as SeedableRng>::Seed::default();
+                let mut chunks = seed.as_mut().chunks_exact_mut(size_of::<u64>());
+                for chunk in chunks.by_ref() {
+                    let src = read_random().expect("read_random failed multiple times").to_ne_bytes();
+                    chunk.copy_from_slice(&src);
+                }
+                let tail = chunks.into_remainder();
+                let n = tail.len();
+                if n > 0 {
+                    let src = read_random().expect("read_random failed multiple times").to_ne_bytes();
+                    tail.copy_from_slice(&src[..n]);
+                }
+
+                RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
+            } else if #[cfg(target_arch = "riscv64")] {
+                use rand::SeedableRng;
+                use ostd::arch::boot::DEVICE_TREE;
+
+                // let chosen = DEVICE_TREE.get().unwrap().find_node("/chosen").unwrap();
+                // let seed:[u8;32] = chosen.property("rng-seed").unwrap().value.try_into().unwrap();
+                let seed: [u8; 32] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+        31, 32
+    ];
+
+                // error!("I am anbo seed {}", seed[0]);
+                RNG.call_once(|| SpinLock::new( StdRng::from_seed(seed)));
+
+            } else {
+                compile_error!("unsupported target");
             }
-            let tail = chunks.into_remainder();
-            let n = tail.len();
-            if n > 0 {
-                let src = read_random().expect("read_random failed multiple times").to_ne_bytes();
-                tail.copy_from_slice(&src[..n]);
-            }
-
-            RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
-        } else if #[cfg(target_arch = "riscv64")] {
-            use rand::SeedableRng;
-            use ostd::arch::boot::DEVICE_TREE;
-
-            let chosen = DEVICE_TREE.get().unwrap().find_node("/chosen").unwrap();
-            let seed = chosen.property("rng-seed").unwrap().value.try_into().unwrap();
-
-            RNG.call_once(|| SpinLock::new(StdRng::from_seed(seed)));
-        } else {
-            compile_error!("unsupported target");
         }
-    }
 }
 
 impl From<RandError> for Error {

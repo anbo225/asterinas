@@ -76,6 +76,7 @@ pub fn init(initramfs_buf: &[u8]) -> Result<()> {
             }
         }
     }
+
     // Mount ProcFS
     let proc_dentry = fs.lookup(&FsPath::try_from("/proc")?)?;
     proc_dentry.mount(ProcFS::new())?;

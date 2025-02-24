@@ -15,6 +15,8 @@ pub mod mapping {
     //! The metadata of each physical page is linear mapped to fixed virtual addresses
     //! in [`FRAME_METADATA_RANGE`].
 
+    use core::alloc::GlobalAlloc;
+    // assert_unsafe_precondition!(GlobalAlloc);
     use core::mem::size_of;
 
     use super::MetaSlot;

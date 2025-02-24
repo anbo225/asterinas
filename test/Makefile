@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+export PATH := /opt/riscv/bin:$(PATH)
 
 BINARY_CACHE_DIR := /opt/linux_binary_cache
 VDSO_DIR := ../target
@@ -27,9 +28,6 @@ INITRAMFS_ALL_DIRS := \
 	$(INITRAMFS)/bin \
 	$(INITRAMFS)/sbin \
 	$(INITRAMFS)/usr/bin \
-	$(INITRAMFS)/usr/local \
-	$(INITRAMFS)/test \
-	$(INITRAMFS)/benchmark \
 	$(INITRAMFS_EMPTY_DIRS)
 SYSCALL_TEST_DIR := $(INITRAMFS)/opt/syscall_test
 
@@ -38,29 +36,6 @@ all: build
 
 $(INITRAMFS)/lib/x86_64-linux-gnu: | $(VDSO_LIB)
 	@mkdir -p $@
-	@cp -L /lib/x86_64-linux-gnu/libc.so.6 $@
-	@cp -L /lib/x86_64-linux-gnu/libstdc++.so.6 $@
-	@cp -L /lib/x86_64-linux-gnu/libm.so.6 $@
-	@cp -L /lib/x86_64-linux-gnu/libgcc_s.so.1 $@
-	@cp -L /lib/x86_64-linux-gnu/libpthread.so.0 $@
-	@# required for benchmarks
-	@cp -L /lib/x86_64-linux-gnu/libcrypto.so.3 $@
-	@cp -L /lib/x86_64-linux-gnu/libcrypt.so.1 $@
-	@cp -L /lib/x86_64-linux-gnu/libdl.so.2 $@
-	@cp -L /lib/x86_64-linux-gnu/libz.so.1 $@
-	@cp -L /lib/x86_64-linux-gnu/libmvec.so.1 $@
-	@cp -L /usr/local/benchmark/iperf/lib/libiperf.so.0 $@
-	@# required for LMbench-network
-	@cp -L /lib/x86_64-linux-gnu/libtirpc.so.3 $@
-	@cp -L /lib/x86_64-linux-gnu/libgssapi_krb5.so.2 $@
-	@cp -L /lib/x86_64-linux-gnu/libkrb5.so.3 $@
-	@cp -L /lib/x86_64-linux-gnu/libk5crypto.so.3 $@
-	@cp -L /lib/x86_64-linux-gnu/libcom_err.so.2 $@
-	@cp -L /lib/x86_64-linux-gnu/libkrb5support.so.0 $@
-	@cp -L /lib/x86_64-linux-gnu/libkeyutils.so.1 $@
-	@cp -L /lib/x86_64-linux-gnu/libresolv.so.2 $@
-	@# required for LevelDB-db_bench_sqlite3
-	@cp -L /lib/x86_64-linux-gnu/libsqlite3.so $@
 	@# required for VDSO
 	@cp -L $(VDSO_LIB) $@
 
@@ -86,7 +61,16 @@ $(INITRAMFS)/etc:
 # Install busybox into /bin and /usr/bin.
 $(INITRAMFS)/bin:
 	@mkdir -p $@
-	@/bin/busybox --install -s $@
+	@wget -O busybox.tar.bz2 https://busybox.net/downloads/busybox-1.35.0.tar.bz2 \
+	&& mkdir -p /root/download/busybox  \
+	&& tar -xf busybox.tar.bz2 --strip-components=1 -C /root/download/busybox \
+	&& rm busybox.tar.bz2
+	@cd /root/download/busybox \
+	&& CROSS_COMPILE=riscv64-unknown-linux-gnu- make  defconfig \
+	&& sed -i "s/# CONFIG_STATIC is not set/CONFIG_STATIC=y/g" .config \
+	&& sed -i 's|CONFIG_PREFIX="./_install"|CONFIG_PREFIX="/root/asterinas/test/build/initramfs"|g' .config \
+	&& make CROSS_COMPILE=riscv64-unknown-linux-gnu-  install 
+	
 
 $(INITRAMFS)/sbin:
 	@mkdir -p $@
@@ -96,32 +80,31 @@ $(INITRAMFS)/sbin:
 $(INITRAMFS)/usr/bin: | $(INITRAMFS)/bin
 	@mkdir -p $@
 	@cp /usr/bin/busybox $@
+# $(INITRAMFS)/usr/local:
+# 	@mkdir -p $@
+# 	@cp -r /usr/local/nginx $@
+# 	@cp -r /usr/local/redis $@
 
-$(INITRAMFS)/usr/local:
-	@mkdir -p $@
-	@cp -r /usr/local/nginx $@
-	@cp -r /usr/local/redis $@
-
-.PHONY: $(INITRAMFS)/test
-$(INITRAMFS)/test:
-	@make --no-print-directory -C apps
+# .PHONY: $(INITRAMFS)/test
+# $(INITRAMFS)/test:
+# 	@make --no-print-directory -C apps
 
 $(INITRAMFS)/benchmark: | $(INITRAMFS)/benchmark/bin
 	@cp -rf $(CUR_DIR)/benchmark/* $@
 
-$(INITRAMFS)/benchmark/bin:
-	@mkdir -p $@
-	@cp /usr/local/benchmark/sysbench/bin/sysbench $@
-	@cp /usr/local/benchmark/iperf/bin/iperf3 $@
-	@cp /usr/local/benchmark/membench/membench $@
-	@cp /usr/local/benchmark/iozone $@
-	@cp -r /usr/local/benchmark/unixbench $@
-	@cp -r /usr/local/benchmark/lmbench $@
-	@cp /usr/local/benchmark/fio/bin/fio $@
-	@cp /usr/local/benchmark/sqlite-speedtest1 $@
-	@cp /usr/local/leveldb/benchmark/db_bench $@
-	@mv $@/db_bench $@/db_bench_leveldb
-	@cp /usr/local/leveldb/benchmark/db_bench_sqlite3 $@
+# $(INITRAMFS)/benchmark/bin:
+# 	@mkdir -p $@
+# 	@cp /usr/local/benchmark/sysbench/bin/sysbench $@
+# 	@cp /usr/local/benchmark/iperf/bin/iperf3 $@
+# 	@cp /usr/local/benchmark/membench/membench $@
+# 	@cp /usr/local/benchmark/iozone $@
+# 	@cp -r /usr/local/benchmark/unixbench $@
+# 	@cp -r /usr/local/benchmark/lmbench $@
+# 	@cp /usr/local/benchmark/fio/bin/fio $@
+# 	@cp /usr/local/benchmark/sqlite-speedtest1 $@
+# 	@cp /usr/local/leveldb/benchmark/db_bench $@
+# 	@mv $@/db_bench $@/db_bench_leveldb
+# 	@cp /usr/local/leveldb/benchmark/db_bench_sqlite3 $@
 
 # Make necessary directories.
 $(INITRAMFS_EMPTY_DIRS):

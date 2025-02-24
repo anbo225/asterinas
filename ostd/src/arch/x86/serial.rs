@@ -25,8 +25,7 @@ pub fn print(args: fmt::Arguments) {
 
 /// The callback function for console input.
 pub type InputCallback = dyn Fn(u8) + Send + Sync + 'static;
-
-/// Registers a callback function to be called when there is console input.
+//// Registers a callback function to be called when there is console input.
 pub fn register_console_input_callback(f: &'static InputCallback) {
     SERIAL_INPUT_CALLBACKS
         .disable_irq()
@@ -63,7 +62,7 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn callback_init() {
-    let mut irq = if !IO_APIC.is_completed() {
+    let mut irq: IrqLine = if !IO_APIC.is_completed() {
         crate::arch::x86::kernel::pic::allocate_irq(4).unwrap()
     } else {
         let irq = IrqLine::alloc().unwrap();

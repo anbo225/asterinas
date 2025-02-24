@@ -42,7 +42,7 @@ impl MmioCommonDevice {
                 CachePolicy::Uncacheable,
             )
         };
-        let res = Self {
+        let res: MmioCommonDevice = Self {
             io_mem,
             irq: handle,
         };
